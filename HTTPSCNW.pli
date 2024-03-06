@@ -1,0 +1,1076 @@
+//ANDREWJP JOB  CLASS=A,MSGCLASS=X,NOTIFY=&SYSUID,REGION=0M
+//PLIPROC  JCLLIB ORDER=IBMZ.SIBMZPRC
+//PLI      EXEC  IBMZCBG,LNGPRFX='IBMZ',LIBPRFX='CEE',
+// PARM.PLI='OBJECT,SOURCE,XREF,OPTIONS,GONUMBER,LIST',
+// PARM.BIND='LIST,MAP,RENT',
+// PARM.GO='POSIX(ON)/'
+//PLI.SYSLIB   DD DISP=SHR,DSN=SYS1.MACLIB
+//PLI.SYSIN DD  *
+*PROCESS SYSTEM(MVS) PP(MACRO('CASE(ASIS)')) SOURCE;
+*PROCESS DEFAULT( NODESCRIPTOR NOOVERLAP );
+
+ HTTPSCNW: PACKAGE EXPORTS(*);
+
+ %INCLUDE SYSLIB(HWTHIPLI);  /* HTTP Interface Declaration File */
+
+ HTTPSCNW:
+  PROCEDURE
+     OPTIONS( MAIN )
+     Returns(Fixed Binary(31));
+
+ Dcl ReqBody         Char(300);
+
+ Dcl RequestHandle   Type HWTH_HANDLE_TYPE;
+ Dcl ConnectHandle   Type HWTH_HANDLE_TYPE;
+
+ Dcl True  Bit(1) Value('1'b);
+ Dcl False Bit(1) Value('0'b);
+
+ Dcl HttpStatusCode   Fixed Binary(32) Unsigned;
+ Dcl ContentLength    Char(10);           /* printable form number */
+
+ /******************************************************************
+  * Data area passed to the response headers (exit) callback.
+  * This can have any size and content.  In this case, we use it
+  * to provide access to variables known to the main program
+  *****************************************************************/
+ Dcl 1 HdrUserdata
+      ,3 HdrUserdataEyecatcher   Char(8)
+      ,3 HdrHttpStatusCodeAddr   Ptr
+      ,3 HdrContentLengthAddr    Ptr
+     ;
+
+ /*****************************************************************
+  * Data area passed to the response body (exit) callback.
+  * This can have any size and content.  In this case, we use it
+  * to provide access to variables known to the main program
+  *****************************************************************/
+ Dcl 1 BdyUserdata
+      ,3 BdyUserdataEyecatcher   Char(8)
+      ,3 BdyContentLengthAddr    Ptr
+     ;
+
+
+ /*****************
+  * Main Program
+  ****************/
+ ConnectHandle = ''b;
+ RequestHandle = ''b;
+ HttpStatusCode = 0;
+ ContentLength = ''b;
+ HdrUserdata = ''b;
+ BdyUserdata = ''b;
+
+ DISPLAY( 'HTTP WEB ENABLEMENT TOOLKIT IN PL/I START' );
+
+ /*************************************************
+  * Initialize and setup the connection handle to
+  * reference the server
+  *************************************************/
+ If SetupConnection( ConnectHandle ) Then
+    Do;
+    /********************************************
+     * Connection handle setup was successful so
+     * now attempt to connect to the server
+     ********************************************/
+    If Connect( ConnectHandle ) Then
+       Do;
+       /********************************************
+        * We were able to connect so now initialize
+        * and setup a request handle
+        ********************************************/
+       If SetupRequest( RequestHandle ) Then
+          Do;
+          Display( 'Issuing POST request to https://10.1.1.1(3000)');
+          Call IssueRequest( ConnectHandle, RequestHandle );
+
+          /***************************************************
+           * The connection and request handle can be re-used
+           * for further requests. You can either modify
+           * the attributes of the existing request handle or
+           * create various other request handles. Once the
+           * request handle(s) is no longer needed,
+           * the resources obtained need to be cleaned up.
+           ***************************************************/
+          Call CleanupHandle( RequestHandle,
+                              HWTH_HANDLETYPE_HTTPREQUEST );
+          End;
+
+        /*****************************************************
+         * All done with requests against the server, so
+         * disconnect from the server before proceeding to
+         * clean up any resources obtained for the connection.
+         *****************************************************/
+        Call Disconnect( ConnectHandle );
+        End; /* endif connected ok */
+
+    /***********************************
+     * Clean up any resources obtained
+     * for the connection instance
+     ***********************************/
+    Call CleanupHandle( ConnectHandle,
+                        HWTH_HANDLETYPE_CONNECTION );
+    End; /* HTTP_SetupConnection = true */
+
+ DISPLAY( 'HTTP WEB ENABLEMENT TOOLKIT IN PL/I END' );
+ Return( 0 );
+
+ /* end MAIN program */
+
+
+ /*******************************************************************
+  * Procedure: SetupConnection
+  *
+  *   Instantiates a connection handle and sets necessary
+  *   connection options.
+  *
+  *   Returns: True if successful, False if toolkit api failure
+  *   (in which case corresponding diagnostic information has
+  *   been surfaced)
+  *
+  *******************************************************************/
+ SetupConnection: Procedure( HandleIn )
+                  Returns(Bit(1));
+
+ Dcl HandleIn  Type HWTH_HANDLE_TYPE;
+ Dcl Rc        Type HWTH_RETURNCODE_TYPE;
+ Dcl DiagArea  Type HWTH_DIAGAREA_TYPE;
+
+ Dcl Option           Type HWTH_SET_OPTION_TYPE;
+ Dcl OptionDecValue   Fixed Binary(32) Unsigned;
+ Dcl OptionStrValue   Char(128);
+ Dcl OptionValueLen   Fixed Binary(32) Unsigned;
+ Dcl OptionValueAddr  Ptr;
+
+ Rc = HWTH_OK;
+
+ /*****************************************
+  * Initialize the work area and retrieve
+  * a handle for the connection.
+  *****************************************/
+ Call HWTHINIT( Rc,
+                HWTH_HANDLETYPE_CONNECTION,
+                HandleIn,
+                DiagArea );
+
+ If Rc = HWTH_OK Then
+    Do;
+    Call DisplayError( Rc,
+                       DiagArea,
+                       'FAILED: HWTHINIT connect handle' );
+    Return ( False );
+    End;
+
+ /***************************************************
+  * For the purpose of this sample, turn ON verbose
+  * toolkit trace (the default setting is OFF)
+  ***************************************************/
+ Option = HWTH_OPT_VERBOSE;
+ OptionDecValue = HWTH_VERBOSE_ON;
+ OptionValueAddr = Addr(OptionDecValue);
+ OptionValueLen  = Size(OptionDecValue);
+
+ Call HWTHSET( Rc,
+               HandleIn,
+               Option,
+               OptionValueAddr,
+               OptionValuelen,
+               DiagArea );
+
+ If ( SetOptionFailed( Rc,
+                       DiagArea,
+                       'FAILED: HWTHSET verbose option',
+                       HandleIn,
+                       HWTH_HANDLETYPE_CONNECTION ) ) Then
+     Return ( False );
+
+ /*********************************************
+  * Set the connection URI for the web server
+  *********************************************/
+ Option = HWTH_OPT_URI;
+ OptionStrValue = ''b;
+ OptionStrValue = 'https://10.1.1.1';
+ OptionValueAddr = Addr( OptionStrValue );
+ OptionValueLen  = 16;
+
+ Call HWTHSET( Rc,
+               HandleIn,
+               Option,
+               OptionValueAddr,
+               OptionValuelen,
+               DiagArea );
+
+ If ( SetOptionFailed( Rc,
+                       DiagArea,
+                       'FAILED: HWTHSET connect uri',
+                       HandleIn,
+                       HWTH_HANDLETYPE_CONNECTION ) ) Then
+     Return ( False );
+
+
+ /*********************************************
+  * Set the connection PORT for the web server
+  *********************************************/
+ Option = HWTH_OPT_PORT;
+ OptionDecValue = 3000;
+ OptionValueAddr = Addr( OptionDecValue );
+ OptionValueLen  = Size( OptionDecValue );
+
+ Call HWTHSET( Rc,
+               HandleIn,
+               Option,
+               OptionValueAddr,
+               OptionValuelen,
+               DiagArea );
+
+ If ( SetOptionFailed( Rc,
+                       DiagArea,
+                       'FAILED: HWTHSET connect port',
+                       HandleIn,
+                       HWTH_HANDLETYPE_CONNECTION ) ) Then
+     Return ( False );
+
+
+ /*********************************************
+  * Set the timeout value for sending
+  *********************************************/
+ Option = HWTH_OPT_SNDTIMEOUTVAL;
+ OptionDecValue = 10;
+ OptionValueAddr = Addr( OptionDecValue );
+ OptionValueLen  = Size( OptionDecValue );
+
+ Call HWTHSET( Rc,
+               HandleIn,
+               Option,
+               OptionValueAddr,
+               OptionValuelen,
+               DiagArea );
+
+ If ( SetOptionFailed( Rc,
+                       DiagArea,
+                       'FAILED: HWTHSET send timeout',
+                       HandleIn,
+                       HWTH_HANDLETYPE_CONNECTION ) ) Then
+     Return ( False );
+
+
+ /*********************************************
+  * Set the timeout value for receiving
+  *********************************************/
+ Option = HWTH_OPT_RCVTIMEOUTVAL;
+ OptionDecValue = 10;
+ OptionValueAddr = Addr( OptionDecValue );
+ OptionValueLen  = Size( OptionDecValue );
+
+ Call HWTHSET( Rc,
+               HandleIn,
+               Option,
+               OptionValueAddr,
+               OptionValuelen,
+               DiagArea );
+
+ If ( SetOptionFailed( Rc,
+                       DiagArea,
+                       'FAILED: HWTHSET receive timeout',
+                       HandleIn,
+                       HWTH_HANDLETYPE_CONNECTION ) ) Then
+     Return ( False );
+
+ /***************************************************
+  * Set to use SSL
+  ***************************************************/
+ Option = HWTH_OPT_USE_SSL;
+ OptionDecValue = HWTH_SSL_USE;
+ OptionValueAddr = Addr(OptionDecValue);
+ OptionValueLen  = Size(OptionDecValue);
+
+ Call HWTHSET( Rc,
+               HandleIn,
+               Option,
+               OptionValueAddr,
+               OptionValuelen,
+               DiagArea );
+
+ If ( SetOptionFailed( Rc,
+                       DiagArea,
+                       'FAILED: HWTHSET use SLL',
+                       HandleIn,
+                       HWTH_HANDLETYPE_CONNECTION ) ) Then
+     Return ( False );
+
+
+ /***************************************************
+  * Set to use a SAF keyring
+  ***************************************************/
+ Option = HWTH_OPT_SSLKEYTYPE;
+ OptionDecValue = HWTH_SSLKEYTYPE_KEYRINGNAME;
+ OptionValueAddr = Addr(OptionDecValue);
+ OptionValueLen  = Size(OptionDecValue);
+
+ Call HWTHSET( Rc,
+               HandleIn,
+               Option,
+               OptionValueAddr,
+               OptionValuelen,
+               DiagArea );
+
+ If ( SetOptionFailed( Rc,
+                       DiagArea,
+                       'FAILED: HWTHSET use keyring type',
+                       HandleIn,
+                       HWTH_HANDLETYPE_CONNECTION ) ) Then
+     Return ( False );
+
+
+ /***************************************************
+  * Set the keyring
+  ***************************************************/
+ Option = HWTH_OPT_SSLKEY;
+ OptionStrValue = ''b;
+ OptionStrValue = 'CLNTWEB';
+ OptionValueAddr = Addr(OptionStrValue);
+ OptionValueLen  = 7;
+
+ Call HWTHSET( Rc,
+               HandleIn,
+               Option,
+               OptionValueAddr,
+               OptionValuelen,
+               DiagArea );
+
+ If ( SetOptionFailed( Rc,
+                       DiagArea,
+                       'FAILED: HWTHSET set keyring name',
+                       HandleIn,
+                       HWTH_HANDLETYPE_CONNECTION ) ) Then
+     Return ( False );
+
+
+ /***************************************************
+  * Set to use TLS 1.2
+  ***************************************************/
+ Option = HWTH_OPT_SSLVERSION;
+ OptionDecValue = HWTH_SSLVERSION_TLSV12;
+ OptionValueAddr = Addr(OptionDecValue);
+ OptionValueLen  = Size(OptionDecValue);
+
+ Call HWTHSET( Rc,
+               HandleIn,
+               Option,
+               OptionValueAddr,
+               OptionValuelen,
+               DiagArea );
+
+ If ( SetOptionFailed( Rc,
+                       DiagArea,
+                       'FAILED: HWTHSET use TLS ver 1.2',
+                       HandleIn,
+                       HWTH_HANDLETYPE_CONNECTION ) ) Then
+     Return ( False );
+
+
+ Return( True );
+
+ End SetupConnection;
+
+
+ /*******************************************************************
+  * Procedure: Connect
+  *
+  *   Issues the HWTHCONN service and performs error checking
+  *
+  *   Returns: True if successful, False if toolkit api failure
+  *   (in which case corresponding diagnostic information has
+  *   been surfaced)
+  *******************************************************************/
+ Connect: Procedure( HandleIn )
+          Returns( Bit(1) );
+
+ Dcl HandleIn  Type HWTH_HANDLE_TYPE;
+ Dcl Rc        Type HWTH_RETURNCODE_TYPE;
+ Dcl DiagArea  Type HWTH_DIAGAREA_TYPE;
+ Dcl ErrorMsg  Char(128);
+
+ Rc = HWTH_OK;
+
+ Call HWTHCONN( Rc,
+                HandleIn,
+                DiagArea );
+
+ If Rc = HWTH_OK Then
+    Do;
+    ErrorMsg = '';
+    ErrorMsg = 'FAILED: HWTHCONN connect';
+    Call DisplayError( Rc, DiagArea, ErrorMsg );
+    Return(False);
+    End;
+ Else
+    Return(True);
+ End Connect;
+
+
+ /*******************************************************************
+  * Procedure: SetupRequest
+  *
+  *   Instantiates a request handle and sets necessary
+  *   request options.
+  *
+  *   Returns: True if successful, False if toolkit api failure
+  *   (in which case corresponding diagnostic information has
+  *   been surfaced)
+  *
+  *******************************************************************/
+ SetupRequest: Procedure( HandleIn )
+                          Returns( Bit(1) );
+
+ Dcl HandleIn  Type HWTH_HANDLE_TYPE;
+ Dcl Rc        Type HWTH_RETURNCODE_TYPE;
+ Dcl DiagArea  Type HWTH_DIAGAREA_TYPE;
+ Dcl Option    Type HWTH_SET_OPTION_TYPE;
+ Dcl 1 TMP union,
+       5 Tnum   Fixed Binary(32) Unsigned,
+       5 Slist  Type HWTH_SLIST_TYPE;
+ Dcl OptionDecValue  Fixed Binary(32) Unsigned;
+ Dcl OptionStrValue  Char(128);
+ Dcl OptionValueLen  Fixed Binary(32) Unsigned;
+ Dcl OptionValueAddr Ptr;
+ Dcl CallbackAddr    Limited entry External;
+ Dcl CallbackAddrPtr Ptr;
+
+
+ Rc = HWTH_OK;
+
+ /***************************************************
+  * Initialize underlying resources (workarea), and
+  * obtain a corresponding request handle.
+  ***************************************************/
+ Call HWTHINIT( Rc,
+                HWTH_HANDLETYPE_HTTPREQUEST,
+                HandleIn,
+                DiagArea );
+
+ If ( Rc = HWTH_OK ) Then
+    Do;
+    Call DisplayError( Rc,
+                       DiagArea,
+                       'FAILED: HWTHINIT request handle' );
+    Return ( False );
+    End;
+
+ /************************************************
+  * Set up a new slist of headers
+  *************************************************/
+
+ Tnum = 0;
+ Option = HWTH_SLST_NEW;
+ OptionStrValue = 'Content-type: application/json';
+ OptionValueAddr = Addr( OptionStrValue );
+ OptionValueLen  = 30;
+
+ Call HWTHSLST( Rc,
+               HandleIn,
+               Option,
+               Slist,
+               OptionValueAddr,
+               OptionValuelen,
+               DiagArea );
+
+ If ( SetOptionFailed( Rc,
+                       DiagArea,
+                       'FAILED: HWTHSLST set slist',
+                       HandleIn,
+                       Option                      ) ) Then
+     Return ( False );
+
+
+ /************************************************
+  * Specify the HTTP method type (GET, POST, ...)
+  *************************************************/
+ Option = HWTH_OPT_REQUESTMETHOD;
+ OptionDecValue = HWTH_HTTP_REQUEST_POST;
+ OptionValueAddr = Addr( OptionDecValue );
+ OptionValueLen  = Size( OptionDecValue );
+
+ Call HWTHSET( Rc,
+               HandleIn,
+               Option,
+               OptionValueAddr,
+               OptionValuelen,
+               DiagArea );
+
+ If ( SetOptionFailed( Rc,
+                       DiagArea,
+                       'FAILED: HWTHSET request method',
+                       HandleIn,
+                       HWTH_HANDLETYPE_HTTPREQUEST ) ) Then
+     Return ( False );
+
+ /***************************
+  * Specify the request URI
+  ****************************/
+ Option = HWTH_OPT_URI;
+ OptionStrValue = ''b;
+ OptionStrValue = '/api/data/'
+ OptionValueAddr = Addr(OptionStrValue);
+ OptionValueLen  = 10;
+
+ Call HWTHSET( Rc,
+               HandleIn,
+               Option,
+               OptionValueAddr,
+               OptionValuelen,
+               DiagArea );
+
+ If ( SetOptionFailed( Rc,
+                       DiagArea,
+                       'FAILED: HWTHSET request uri',
+                       HandleIn,
+                       HWTH_HANDLETYPE_HTTPREQUEST ) ) Then
+     Return ( False );
+
+
+ /***************************
+  * Set up  the request Header
+  ****************************/
+ Option = HWTH_OPT_HTTPHEADERS;
+ OptionValueAddr = Addr(SList);
+ OptionValueLen  = Size(SList);
+
+ Call HWTHSET( Rc,
+               HandleIn,
+               Option,
+               OptionValueAddr,
+               OptionValuelen,
+               DiagArea );
+
+ If ( SetOptionFailed( Rc,
+                       DiagArea,
+                       'FAILED: HWTHSET set up header',
+                       HandleIn,
+                       HWTH_HANDLETYPE_HTTPREQUEST ) ) Then
+     Return ( False );
+
+ /**********************************************************
+  * Request body should be automatically converted from
+  * EBCDIC to ASCII (the default is no conversion)
+  *********************************************************/
+ Option = HWTH_OPT_TRANSLATE_REQBODY;
+ OptionDecValue = HWTH_XLATE_REQBODY_E2A;
+ OptionValueLen  = 4;
+ OptionValueAddr = Addr(OptionDecValue);
+
+ Call HWTHSET( Rc,
+               HandleIn,
+               Option,
+               OptionValueAddr,
+               OptionValuelen,
+               DiagArea );
+
+ If ( SetOptionFailed( Rc,
+                       DiagArea,
+                       'FAILED: HWTHSET translate option',
+                       HandleIn,
+                       HWTH_HANDLETYPE_HTTPREQUEST ) ) Then
+     Return ( False );
+
+ /**********************************************************
+  * Response body should be automatically converted from
+  * ASCII to EBCDIC (the default is no conversion)
+  *********************************************************/
+ Option = HWTH_OPT_TRANSLATE_RESPBODY;
+ OptionDecValue = HWTH_XLATE_RESPBODY_A2E;
+ OptionValueLen  = 4;
+ OptionValueAddr = Addr(OptionDecValue);
+
+ Call HWTHSET( Rc,
+               HandleIn,
+               Option,
+               OptionValueAddr,
+               OptionValuelen,
+               DiagArea );
+
+ If ( SetOptionFailed( Rc,
+                       DiagArea,
+                       'FAILED: HWTHSET translate option',
+                       HandleIn,
+                       HWTH_HANDLETYPE_HTTPREQUEST ) ) Then
+     Return ( False );
+
+ /**********************************************************
+  * Link to the data to send
+  *********************************************************/
+ Option = HWTH_OPT_REQUESTBODY;
+
+ ReqBody  = '{"name": "Mainframe zOS PL/I ", "age": 59, ' ||
+            '"email": "mainframe.zos@ibm.com", '          ||
+            '"address": {"street": "123 Main St", '       ||
+            '"city": "Taipei", "state": "Taiwan", '       ||
+            '"zip": "1964"}}';
+
+ OptionValueAddr = Addr(ReqBody);
+ OptionValueLen  = Size(ReqBody);
+
+ Call HWTHSET( Rc,
+               HandleIn,
+               Option,
+               OptionValueAddr,
+               OptionValuelen,
+               DiagArea );
+
+ If ( SetOptionFailed( Rc,
+                       DiagArea,
+                       'FAILED: HWTHSET translate option',
+                       HandleIn,
+                       HWTH_HANDLETYPE_HTTPREQUEST ) ) Then
+     Return ( False );
+
+ /********************************************************
+  * Set the response header exit (callback) routine.  This
+  * routine is to receive control once for each response
+  * header that is returned by the web server.
+  ********************************************************/
+ CallbackAddr = HWTHHDRX;
+ CallbackAddrPtr = Addr( CallbackAddr );
+ Option = HWTH_OPT_RESPONSEHDR_EXIT;
+ OptionValueLen  = 4;
+ OptionValueAddr = CallbackAddrPtr;
+
+ Call HWTHSET( Rc,
+               HandleIn,
+               Option,
+               OptionValueAddr,
+               OptionValuelen,
+               DiagArea );
+
+ If ( SetOptionFailed( Rc,
+                       DiagArea,
+                       'FAILED: HWTHSET headers exit',
+                       HandleIn,
+                       HWTH_HANDLETYPE_HTTPREQUEST ) ) Then
+     Return ( False );
+
+ /**************************************************
+  * Prepare the userdata area for the headers exit,
+  * and make it available to them on callback(s)
+  **************************************************/
+ HdrUserdata = ''b;
+ HdrUserdata.HdrUserdataEyecatcher = 'HDRUDATA';
+ HdrUserdata.HdrHttpStatusCodeAddr = Addr( HttpStatusCode );
+ HdrUserData.HdrContentLengthAddr = Addr( ContentLength );
+ Option = HWTH_OPT_RESPONSEHDR_USERDATA;
+ OptionValueAddr = Addr( HdrUserdata );
+ OptionValueLen  = Size( HdrUserdata );
+
+ Call HWTHSET( Rc,
+               HandleIn,
+               Option,
+               OptionValueAddr,
+               OptionValuelen,
+               DiagArea );
+
+ If ( SetOptionFailed( Rc,
+                       DiagArea,
+                       'FAILED: HWTHSET headers userdata',
+                       HandleIn,
+                       HWTH_HANDLETYPE_HTTPREQUEST ) ) Then
+     Return ( False );
+
+ /********************************************************
+  * Set the body exit (callback) routine.  This routine
+  * receives control once if a response body is returned
+  * by the web server.
+  ********************************************************/
+ CallbackAddr = HWTHBDYX;
+ CallbackAddrPtr = Addr(CallbackAddr);
+ Option = HWTH_OPT_RESPONSEBODY_EXIT;
+ OptionValueLen  = 4;
+ OptionValueAddr = CallbackAddrPtr;
+
+ Call HWTHSET( Rc,
+               HandleIn,
+               Option,
+               OptionValueAddr,
+               OptionValuelen,
+               DiagArea );
+
+ If ( SetOptionFailed( Rc,
+                       DiagArea,
+                       'FAILED: HWTHSET body exit',
+                       HandleIn,
+                       HWTH_HANDLETYPE_HTTPREQUEST ) ) Then
+     Return ( False );
+
+ /************************************************
+  * Prepare the userdata area for the body exit,
+  * and make it available to them on callback
+  ***********************************************/
+ BdyUserdata = ''b;
+ BdyUserdata.BdyUserdataEyeCatcher = 'BDYUDATA';
+ BdyUserdata.BdyContentLengthAddr = Addr( ContentLength );
+ Option = HWTH_OPT_RESPONSEBODY_USERDATA;
+ OptionValueAddr = Addr( BdyUserData );
+ OptionValueLen  = Size( BdyUserData );
+
+ Call HWTHSET( Rc,
+               HandleIn,
+               Option,
+               OptionValueAddr,
+               OptionValuelen,
+               DiagArea );
+
+ If ( SetOptionFailed( Rc,
+                       DiagArea,
+                       'FAILED: HWTHSET body userdata',
+                       HandleIn,
+                       HWTH_HANDLETYPE_HTTPREQUEST ) ) Then
+     Return ( False );
+
+ Return( True );
+
+ End SetupRequest;
+
+
+ /*******************************************************************
+  * Procedure: IssueRequest
+  *
+  *   Issues the HWTHRQST service and performs error checking
+  *
+  *******************************************************************/
+ IssueRequest: Procedure( ConnectHandle,
+                          RequestHandle );
+
+ Dcl ConnectHandle  Type HWTH_HANDLE_TYPE;
+ Dcl RequestHandle  Type HWTH_HANDLE_TYPE;
+ Dcl Rc             Type HWTH_RETURNCODE_TYPE;
+ Dcl DiagArea       Type HWTH_DIAGAREA_TYPE;
+ Dcl ErrorMsg       Char(128);
+
+ Rc = HWTH_OK;
+
+ Call HWTHRQST( Rc,
+                ConnectHandle,
+                RequestHandle,
+                DiagArea );
+
+ If Rc = HWTH_OK Then
+    Do;
+    ErrorMsg = '';
+    ErrorMsg = 'FAILED: HWTHRQST request';
+    Call DisplayError( Rc, DiagArea, ErrorMsg );
+    End;
+
+ End IssueRequest;
+
+ /*******************************************************************
+  * Procedure: Disconnect
+  *
+  *   Issues the HWTHDISC service and performs error checking
+  *
+  *******************************************************************/
+ Disconnect: Procedure( HandleIn );
+
+ Dcl HandleIn    Type HWTH_HANDLE_TYPE;
+ Dcl Rc          Type HWTH_RETURNCODE_TYPE;
+ Dcl DiagArea    Type HWTH_DIAGAREA_TYPE;
+ Dcl ErrorMsg    Char(128);
+
+ Rc = HWTH_OK;
+
+ Call HWTHDISC( Rc,
+                HandleIn,
+                DiagArea );
+
+ If Rc = HWTH_OK Then
+    Do;
+    ErrorMsg = '';
+    ErrorMsg = 'FAILED: HWTHDISC disconnect';
+    Call DisplayError( Rc, DiagArea, ErrorMsg );
+    End;
+
+ End Disconnect;
+
+
+
+ /*******************************************************************
+  * Procedure: CleanupHandle
+  *
+  *  Invokes HWTHTERM to clean up resources obtained via
+  *  previous call to HWTHINIT.  The input can be either
+  *  a connection handle or a request handle.
+  *
+  *******************************************************************/
+ CleanupHandle: Procedure( HandleIn,
+                           TypeOfHandle );
+
+ Dcl HandleIn        Type HWTH_HANDLE_TYPE;
+ Dcl TypeOfHandle    Type HWTH_HANDLETYPE_TYPE;
+ Dcl Rc              Type HWTH_RETURNCODE_TYPE;
+ Dcl DiagArea        Type HWTH_DIAGAREA_TYPE;
+ Dcl ErrorMsg        Char(128);
+
+ Rc = HWTH_OK;
+
+ Call HWTHTERM( Rc,
+                HandleIn,
+                HWTH_NOFORCE,
+                DiagArea );
+ If Rc = HWTH_OK Then
+    Do;
+    /******************************************
+     * The initial termination request failed,
+     * so we try brute force
+     ******************************************/
+    Rc = HWTH_OK;
+
+    Call HWTHTERM( Rc,
+                   HandleIn,
+                   HWTH_FORCE,
+                   DiagArea );
+    End;
+
+ If Rc = HWTH_OK Then
+    Do;
+    If TypeOfHandle = HWTH_HANDLETYPE_CONNECTION Then
+       Do;
+       ErrorMsg = '';
+       ErrorMsg = 'FAILED: HWTHTERM connect handle';
+       Call DisplayError( Rc, DiagArea, ErrorMsg );
+       End;
+    Else
+       Do;
+       ErrorMsg = '';
+       ErrorMsg = 'FAILED: HWTHTERM request handle';
+       Call DisplayError( Rc, DiagArea, ErrorMsg );
+       End;
+    End;
+
+ End CleanupHandle;
+
+
+ /*******************************************************************
+  * Procedure: DisplayError
+  *
+  * Display error diagnostics
+  *
+  *******************************************************************/
+ DisplayError: Procedure( Rc,
+                          DiagArea,
+                          Message );
+
+ Dcl Rc         Type HWTH_RETURNCODE_TYPE inonly nonasgn;
+ Dcl DiagArea   Type HWTH_DIAGAREA_TYPE inonly nonasgn;
+ Dcl Message    Char(128) inonly nonasgn;
+
+
+ /* Write the Error Text */
+ Display( Message );
+
+ /* Write the Return Code in printable hex form */
+ Display( 'Return Code = ' || HEX(Rc) );
+
+ /* Write the DiagArea Reason Code field */
+ Display('Reason Code = ' || HEX(DiagArea.HWTH_ReasonCode));
+
+ /* Write the DiagArea ServiceID field */
+ Display( 'Service Id = ' || HEX(DiagArea.HWTH_Service) );
+
+ /***********************************************************
+  * Write the DiagArea Description text (in 2 parts, as its
+  * declared length exceeds the limitation of Display()
+  ***********************************************************/
+ Display('Reason Text = '|| SUBSTR(DiagArea.HWTH_ReasonDesc,1,110));
+ Display(SUBSTR(DiagArea.HWTH_ReasonDesc,111,17));
+
+ End DisplayError;
+
+
+ /*******************************************************************
+  * Procedure: SetOptionFailed
+  *
+  * If an HWTHSET failed to set an option for the input handle,
+  * then surface diagnostics about the failure and release any
+  * toolkit resources which may be associated with the
+  * (now-useless) handle.
+  *******************************************************************/
+ SetOptionFailed: Procedure( Rc,
+                             DiagArea,
+                             Message,
+                             HandleIn,
+                             TypeOfHandle )
+                  Returns (Bit(1));
+
+ Dcl Rc            Type HWTH_RETURNCODE_TYPE inonly nonasgn;
+ Dcl DiagArea      Type HWTH_DIAGAREA_TYPE inonly nonasgn;
+ Dcl Message       Char(128) inonly nonasgn;
+ Dcl HandleIn      Type HWTH_HANDLE_TYPE;
+ Dcl TypeOfHandle  Type HWTH_HANDLETYPE_TYPE;
+
+ If ( HWTH_OK = Rc ) Then
+    Return ( False );
+
+ Call DisplayError( Rc, DiagArea, Message );
+
+ Call CleanupHandle( HandleIn, TypeOfHandle );
+
+ return ( True );
+
+ End SetOptionFailed;
+
+
+ END HTTPSCNW;
+
+ HWTHHDRX: Procedure( HTTPResponseLine,
+                      exitFlags,
+                      namePtr,
+                      nameLen,
+                      valuePtr,
+                      valueLen,
+                      userDataPtr,
+                      userDataLen )
+           OPTIONS(REORDER)
+           Returns(Fixed Binary(31) ByValue);
+ /*******************************************************************/
+ /*    MODULE-NAME: HWTHHDRX                                        */
+ /*    DESCRIPTION: SAMPLE RESPONSE HEADER EXIT                     */
+ /*******************************************************************/
+
+ Dcl HTTPResponseLine Type HWTH_STATUS_LINE_TYPE;
+ Dcl exitFlags        Type HWTH_RESP_EXIT_FLAGS_TYPE;
+ Dcl namePtr      Ptr;
+ Dcl nameLen      Fixed Binary(32) Unsigned;
+ Dcl valuePtr     Ptr;
+ Dcl valueLen     Fixed Binary(32) Unsigned;
+ Dcl userDataPtr  Ptr;
+ Dcl userDataLen  Fixed Binary(32) Unsigned;
+
+
+ Dcl ResponseVersion Char(32)
+                     Based(HTTPResponseLine.HWTH_VersionPtr);
+ Dcl ResponseReason  Char(32)
+                     Based(HTTPResponseLine.HWTH_ReasonPtr);
+
+ Dcl CONTENT_LENGTH_NAME  Char(14)  Value('CONTENT-LENGTH');
+ Dcl HdrName     Char(14) Based(namePtr);
+ Dcl HdrValue    Char(10) Based(valuePtr);
+ Dcl UpperName   Char(14);
+ Dcl Reason      Char(32);
+ Dcl rsnLen      Fixed Binary(31);
+
+ /************************************************************
+  * Data area passed to this callback from the main program.
+  ************************************************************/
+ Dcl 1 HdrUserdata  Based( userDataPtr )
+      ,3 * Char(8)
+      ,3 HdrHttpStatusCodeAddr  Ptr
+      ,3 HdrContentLengthAddr   Ptr
+     ;
+
+ Dcl HttpStatusCode Fixed Binary(32) Unsigned
+                         Based(HdrUserdata.HdrHttpStatusCodeAddr);
+ Dcl ContentLength  Char(10)
+                         Based(HdrUserdata.HdrContentLengthAddr);
+
+ /************************************************************
+  * Display the status code and reason the first time this
+  * header exit routine receives control, and save the status
+  * code in the sharable place designated by the userdata
+  ************************************************************/
+ If HttpStatusCode = 0 Then
+    Do;
+    HttpStatusCode = HttpResponseLine.HWTH_statusCode;
+    /***********************************************************
+     * If the web server did not return the expected status,
+     * indicate that the balance of response processing is to
+     * be aborted (in which case HWTHRQST resumes control and
+     * indicates this condition)
+     **********************************************************/
+    If HttpStatusCode = 200 Then
+       Do;
+       Display( 'Unexpected HTTP Status Code encountered' );
+       Display( 'Expected: 200, Received: '||HttpStatusCode );
+       Return (HWTH_RESP_EXIT_RC_ABORT);
+       End;
+    Else
+       Do;
+       Display( 'HTTP status: '||
+                  Collapse( HttpResponseLine.HWTH_statusCode, ' ' ) );
+       rsnLen = HttpResponseLine.HWTH_ReasonLen;
+       Reason = ' ';
+       Reason = Substr( ResponseReason, 1, RsnLen );
+       Display( 'HTTP reason: '||Reason );
+       End;
+    End;
+
+  /***********************************************************
+   * If this is the Content-Length header, then we will save
+   * its value in a sharable place so that the response body
+   * exit can corroborate it.
+   ***********************************************************/
+ If nameLen = Size( HdrName ) Then
+    Do;
+    UpperName = Uppercase( HdrName );
+    If UpperName = CONTENT_LENGTH_NAME Then
+       Do;
+       ContentLength = '';
+       ContentLength = Substr( HdrValue, 1, valueLen );
+       End;
+    End;
+
+ Return(HWTH_RESP_EXIT_RC_OK);
+
+ End HWTHHDRX;
+
+ HWTHBDYX: PROCEDURE( HTTPResponseLine,
+                      exitFlags,
+                      bodyPtr,
+                      bodySize,
+                      userDataPtr,
+                      userDataLen )
+           OPTIONS(REORDER)
+           Returns(Fixed Binary(31) ByValue);
+ /*******************************************************************/
+ /*    MODULE-NAME: HWTHBDYX                                        */
+ /*    DESCRIPTION: RESONPSE BODY EXIT                              */
+ /*******************************************************************/
+
+ Dcl HTTPResponseLine  Type HWTH_STATUS_LINE_TYPE;
+ Dcl exitFlags    Fixed Binary(32) Unsigned;
+ Dcl bodyPtr      Ptr;
+ Dcl bodySize     Fixed Binary(32) Unsigned;
+ Dcl userDataPtr  Ptr;
+ Dcl userDataLen  Fixed Binary(32) Unsigned;
+
+ /************************************************************
+  * Data area passed to this callback from the main program.
+  ************************************************************/
+ Dcl 1 BdyUserdata  Based(userDataPtr)
+      ,3 *  Char(8)
+      ,3 BdyContentLengthAddr  Ptr
+      ;
+
+ Dcl ContentLength  Char(10) Based(BdyUserdata.BdyContentLengthAddr);
+ Dcl exSize   Fixed Binary(31);
+
+ /*********************************************************
+  * Compare the expected size (content-length value saved
+  * earlier by the response headers exit) with the value
+  * of bodySize.
+  *********************************************************/
+ exSize = Fixed( ContentLength );
+ If exSize = bodySize Then
+    Display('Response body contains '||Collapse(exSize,' ')||' bytes');
+ Else
+    Do;
+    Display( 'Response data length mismatch.' );
+    Display( 'Expected content length: '||ContentLength );
+    Display( 'Response body size: '||bodySize );
+    End;
+
+ Return (HWTH_RESP_EXIT_RC_OK);
+
+ End HWTHBDYX;
+/*
+//BIND.SYSLIB  DD DISP=SHR,DSN=SYS1.CSSLIB
+//             DD DISP=SHR,DSN=CEE.SCEELKED
+//                                                                      00280016
+

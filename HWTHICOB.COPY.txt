@@ -1,0 +1,391 @@
+      * START OF SPECIFICATIONS **************************************
+      *
+      *01* MACRO NAME: HWTHICOB
+      *
+      *01* DESCRIPTIVE NAME: COBOL Interface Declaration File for the
+      *                      HTTP Enabler portion of the z/OS Client
+      *                      Web Enablement Toolkit.
+      *
+      *01* PROPRIETARY STATEMENT=
+      ***PROPRIETARY_STATEMENT***************************************
+      *
+      *
+      * LICENSED MATERIALS - PROPERTY OF IBM
+      * 5650-ZOS COPYRIGHT IBM CORP. 2015
+      *
+      * STATUS= HBB77A0
+      *
+      ***END_OF_PROPRIETARY_STATEMENT********************************
+      *     DSECT Name: n/a
+      *
+      *    Component: HWT (SCHWT)
+      *
+      *    External Classification: PI
+      *    End of External Classification:
+      *
+      *    Eye-Catcher: none
+      *
+      *01* FUNCTION:
+      *02*  HWTHICOB defines HWT constants and declares for programs
+      *     written in the COBOL language which will invoke the HWT
+      *     HTTP/HTTPS Enabler services.
+      *
+      *     Note: This copybook file assumes an Enterprise COBOL for
+      *       for z/OS Version 5, Release 1 or higher compiler level
+      *       is being used.  Using this copybook file with earlier
+      *       releases of the compiler is possible, but will require
+      *       modification.
+      *
+      *01* METHOD OF ACCESS:
+      *02*  COPY HWTHICOB.
+      *
+      *01* DISTRIBUTION LIBRARY: AMACLIB
+      *
+      *01* CHANGE-ACTIVITY:
+      *
+      * PN   REASON  RLSE    DATE   ORG   COMMENTS
+      * --------------------------------------------------------------
+      * $01= OA48505 HBB77A0 150806 PDSCW: z/OS Client Web Enablement
+      *      Toolkit Support (HTTP enablement)
+      * $02= OA49002 HBB7790 151130 PDLH: - Add service constants
+      *                                   - Add Verbose DD option
+      *                                   - Miscellaneous changes
+      * $03= OA50890 HBB7790 160712 PDSCW: Prolog updates
+      * $04= OA51673 HBB7790 161201 PDJK: - Add HEAD method constant
+      * $05= OA50957 HBB7790 170321 PDJK: - AT-TLS toleration
+      * $06= OA53546 HBB7790 170925 PDLH: - Support for user-defined
+      *                                     cipher specs
+      * $07= OA54207 HBB7790 171103 PDLH: - Add missing ExitFlag
+      *                                     constants
+      ** END OF SPECIFICATIONS ***************************************
+      *
+      * --------------------------------------------------------------
+      * Abend Codes
+      * --------------------------------------------------------------
+       01  HWTH-ABEND-CODE                GLOBAL PIC 9(9) Binary.
+           88  HWTH-HCONN-PRIM-ADDR     VALUE 268500992.
+           88  HWTH-HCONN-BAD-PARM      VALUE 268500993.
+           88  HWTH-HDISC-PRIM-ADDR     VALUE 268566528.
+           88  HWTH-HDISC-BAD-PARM      VALUE 268566529.
+           88  HWTH-HINIT-PRIM-ADDR     VALUE 268632064.
+           88  HWTH-HINIT-BAD-PARM      VALUE 268632065.
+           88  HWTH-HRQST-PRIM-ADDR     VALUE 268697600.
+           88  HWTH-HRQST-BAD-PARM      VALUE 268697601.
+           88  HWTH-HRSET-PRIM-ADDR     VALUE 268763136.
+           88  HWTH-HRSET-BAD-PARM      VALUE 268763137.
+           88  HWTH-HSET-PRIM-ADDR      VALUE 268828672.
+           88  HWTH-HSET-BAD-PARM       VALUE 268828673.
+           88  HWTH-HSLST-PRIM-ADDR     VALUE 268894208.
+           88  HWTH-HSLST-BAD-PARM      VALUE 268894209.
+           88  HWTH-HTERM-PRIM-ADDR     VALUE 268959744.
+           88  HWTH-HTERM-BAD-PARM      VALUE 268959745.
+      *
+
+      * --------------------------------------------------------------
+      * Return Codes
+      * --------------------------------------------------------------
+       01  HWTH-RETURN-CODE               GLOBAL PIC 9(9) Binary.
+           88  HWTH-OK                       VALUE 0.
+           88  HWTH-WARNING                  VALUE 4.
+           88  HWTH-HANDLE-INV               VALUE 257.
+           88  HWTH-HANDLE-INUSE             VALUE 258.
+           88  HWTH-HANDLETYPE-INV           VALUE 259.
+           88  HWTH-INACCESSIBLE-PARM        VALUE 260.
+           88  HWTH-CANNOT-OBTAIN-WORKAREA   VALUE 261.
+           88  HWTH-COMMUNICATION-ERROR      VALUE 262.
+           88  HWTH-CANNOT-INCREASE-WORKAREA VALUE 263.
+           88  HWTH-CANNOT-FREE-WORKAREA     VALUE 264.
+           88  HWTH-CONNECTION-NOT-ACTIVE    VALUE 265.
+           88  HWTH-HSET-OPTIONVALADDR-INV   VALUE 513.
+           88  HWTH-HSET-OPTIONVALLEN-INV    VALUE 514.
+           88  HWTH-HSET-OPTION-INV          VALUE 515.
+           88  HWTH-HSET-OPTIONVALUE-INV     VALUE 516.
+           88  HWTH-HSET-CONN-ALREADY-ACTIVE VALUE 517.
+           88  HWTH-HSLST-SLIST-INV          VALUE 769.
+           88  HWTH-HSLST-FUNCTION-INV       VALUE 770.
+           88  HWTH-HSLST-STRINGLEN-INV      VALUE 771.
+           88  HWTH-HSLST-STRINGADDR-INV     VALUE 772.
+           88  HWTH-HTERM-FORCEOPTION-INV    VALUE 1025.
+           88  HWTH-HCONN-CONNECT-INV        VALUE 1281.
+           88  HWTH-HRQST-REQUEST-INV        VALUE 1537.
+           88  HWTH-INTERRUPT-STATUS-INV     VALUE 3841.
+           88  HWTH-LOCKS-HELD               VALUE 3842.
+           88  HWTH-MODE-INV                 VALUE 3843.
+           88  HWTH-AUTHLEVEL-INV            VALUE 3844.
+           88  HWTH-ENVIRONMENTAL-ERROR      VALUE 3845.
+           88  HWTH-UNSUPPORTED-RELEASE      VALUE 3846.
+           88  HWTH-UNEXPECTED-ERROR         VALUE 4095.
+
+      * ------------------------------------------------------------
+      * Generic type definitions for multiple services
+      * ------------------------------------------------------------
+      *
+       01  HWTH-CONN-HANDLE      GLOBAL PIC X(12).
+       01  HWTH-REQ-HANDLE       GLOBAL PIC X(12).
+       01  HWTH-DIAG-AREA-STRUCT GLOBAL PIC X(136).
+      *
+       01  HWTH-DIAG-AREA       GLOBAL REDEFINES HWTH-DIAG-AREA-STRUCT.
+         05  HWTH-SERVICE-NUM.
+             07 HWTH-SERVID             PIC 9(4) BINARY.
+                88 HWTH-SERVICE-SEND-REQUEST      VALUE 2.
+                88 HWTH-SERVICE-SOCKET-CLOSE      VALUE 3.
+                88 HWTH-SERVICE-SECURE-ENCODE64   VALUE 4.
+                88 HWTH-SERVICE-SETSTACK-AFFINITY VALUE 5.
+                88 HWTH-SERVICE-SOCKET-BIND       VALUE 6.
+                88 HWTH-SERVICE-SET-SOCK-OPT      VALUE 7.
+                88 HWTH-SERVICE-SOCKET-SEND       VALUE 8.
+                88 HWTH-SERVICE-SOCKET-RECEIVE    VALUE 9.
+                88 HWTH-SERVICE-SOCKET-CONNECT    VALUE 11.
+                88 HWTH-SERVICE-ICONV-OPEN        VALUE 12.
+                88 HWTH-SERVICE-ICONV             VALUE 13.
+                88 HWTH-SERVICE-SEC-SOCKET-SEND   VALUE 14.
+                88 HWTH-SERVICE-SEC-SOCKET-READ   VALUE 15.
+                88 HWTH-SERVICE-SEC-ENVIRON-OPEN  VALUE 16.
+                88 HWTH-SERVICE-SEC-ATTR-SET-ENUM VALUE 17.
+                88 HWTH-SERVICE-SEC-ATTR-SET-BUFF VALUE 18.
+                88 HWTH-SERVICE-SEC-ENVIRON-INIT  VALUE 19.
+                88 HWTH-SERVICE-SEC-SOCKET-OPEN   VALUE 20.
+                88 HWTH-SERVICE-SEC-SET-NUM-VALUE VALUE 21.
+                88 HWTH-SERVICE-SEC-SOCKET-INIT   VALUE 22.
+                88 HWTH-SERVICE-SEC-SOCKETSHUTDWN VALUE 23.
+                88 HWTH-SERVICE-SEC-SOCKET-CLOSE  VALUE 24.
+                88 HWTH-SERVICE-SEC-ENVIRON-CLOSE VALUE 25.
+                88 HWTH-SERVICE-RECEIVE-RESPONSE  VALUE 26.
+                88 HWTH-SERVICE-GETADDRINFO       VALUE 28.
+                88 HWTH-SERVICE-HDR-EXIT-ABORT    VALUE 29.
+                88 HWTH-SERVICE-SOCKET-SHUTDOWN   VALUE 30.
+                88 HWTH-SERVICE-MALLOC            VALUE 31.
+                88 HWTH-SERVICE-REALLOC           VALUE 32.
+                88 HWTH-SERVICE-ESTABLISH-TUNNEL  VALUE 33.
+                88 HWTH-SERVICE-INIT-TRACE        VALUE 34.
+                88 HWTH-SERVICE-ICONN-IMPL        VALUE 54.
+                88 HWTH-SERVICE-CHECK-TTLS        VALUE 55.
+                88 HWTH-SERVICE-SET-COOKIE        VALUE 101.
+                88 HWTH-SERVICE-GET-COOKIE-HEADER VALUE 102.
+                88 HWTH-SERVICE-SERIALIZE         VALUE 103.
+                88 HWTH-SERVICE-DESERIALIZE       VALUE 104.
+                88 HWTH-SERVICE-GET-CELL          VALUE 105.
+                88 HWTH-SERVICE-FREE-CELL         VALUE 106.
+                88 HWTH-SERVICE-LIST-INSERT       VALUE 107.
+                88 HWTH-SERVICE-LIST-DELETE       VALUE 108.
+                88 HWTH-SERVICE-FIND-APPL-COOKIES VALUE 109.
+                88 HWTH-SERVICE-GET-RQST-COOKIES  VALUE 110.
+                88 HWTH-SERVICE-TOCOOKIE-STRARRAY VALUE 111.
+                88 HWTH-SERVICE-COOKIE-TO-STRING  VALUE 112.
+                88 HWTH-SERVICE-TO-CANONICAL      VALUE 113.
+                88 HWTH-SERVICE-STORAGE           VALUE 201.
+                88 HWTH-SERVICE-CSRPBLD           VALUE 202.
+                88 HWTH-SERVICE-CSRPEXP           VALUE 203.
+                88 HWTH-SERVICE-LOAD              VALUE 204.
+                88 HWTH-SERVICE-CEEPIPI           VALUE 205.
+                88 HWTH-SERVICE-PREP-LEENV        VALUE 206.
+             07 HWTH-RESERVED           PIC 9(4) BINARY.
+         05  HWTH-SERVICE REDEFINES HWTH-SERVICE-NUM PIC 9(9) BINARY.
+         05  HWTH-REASONCODE            PIC 9(9) BINARY.
+            88  HWTH-RSN-REDIRECTED            VALUE 1.
+            88  HWTH-RSN-NEEDED-REDIRECT       VALUE 2.
+            88  HWTH-RSN-REDIRECT-XDOMAIN      VALUE 3.
+            88  HWTH-RSN-REDIRECT-TO-HTTP      VALUE 4.
+            88  HWTH-RSN-REDIRECT-TO-HTTPS     VALUE 5.
+            88  HWTH-RSN-NO-REDIRECT-LOCATION  VALUE 6.
+            88  HWTH-RSN-HDR-EXIT-ABORT        VALUE 7.
+            88  HWTH-RSN-TUNNEL-UNSUCCESSFUL   VALUE 8.
+            88  HWTH-RSN-MALFORMED-CHNK-ENCODE VALUE 9.
+            88  HWTH-RSN-MALFORMED-REDIR-URI   VALUE 10.
+            88  HWTH-RSN-COOKIE-STORE-FULL     VALUE 51.
+            88  HWTH-RSN-COOKIE-INVALID        VALUE 52.
+            88  HWTH-RSN-COOKIE-STORE-INV-PARM VALUE 53.
+            88  HWTH-RSN-COOKIE-ST-INCOMPLETE  VALUE 54.
+            88  HWTH-RSN-COOKIE-ST-MALLOC-ERR  VALUE 55.
+            88  HWTH-RSN-COOKIE-ST-FREE-ERROR  VALUE 56.
+            88  HWTH-RSN-COOKIE-ST-UNEXP-ERROR VALUE 57.
+         05  HWTH-REASONDESC            PIC X(128).
+      *
+      * ============================================================
+      * HWTHINIT Parameter Definitions and Constants
+      * ============================================================
+      *
+       01  HWTH-HANDLETYPE               GLOBAL PIC 9(9) BINARY.
+           88  HWTH-HANDLETYPE-CONNECTION      VALUE 1.
+           88  HWTH-HANDLETYPE-HTTPREQUEST     VALUE 2.
+      *
+      * ============================================================
+      * HWTHSET Parameter Definitions and Constants
+      * ============================================================
+      * ------------------------------------------------------------
+      * HTTP Enabler Connection / Request Options
+      * ------------------------------------------------------------
+       01  HWTH-SET-OPTION               GLOBAL PIC 9(9) BINARY.
+           88 HWTH-OPT-URI                   VALUE 1.
+           88 HWTH-OPT-PORT                  VALUE 21.
+           88 HWTH-OPT-IPSTACK               VALUE 22.
+           88 HWTH-OPT-LOCALIPADDR           VALUE 23.
+           88 HWTH-OPT-LOCALPORT             VALUE 24.
+           88 HWTH-OPT-PROXY                 VALUE 25.
+           88 HWTH-OPT-PROXYPORT             VALUE 26.
+           88 HWTH-OPT-USE-SSL               VALUE 27.
+           88 HWTH-OPT-SSLVERSION            VALUE 28.
+           88 HWTH-OPT-SSLKEYTYPE            VALUE 29.
+           88 HWTH-OPT-SSLKEY                VALUE 30.
+           88 HWTH-OPT-SSLKEYSTASHFILE       VALUE 31.
+           88 HWTH-OPT-SSLCLIENTAUTHLABEL    VALUE 32.
+           88 HWTH-OPT-SNDTIMEOUTVAL         VALUE 33.
+           88 HWTH-OPT-RCVTIMEOUTVAL         VALUE 34.
+           88 HWTH-OPT-MAX-REDIRECTS         VALUE 35.
+           88 HWTH-OPT-XDOMAIN-REDIRECTS     VALUE 36.
+           88 HWTH-OPT-REDIRECT-PROTOCOLS    VALUE 37.
+           88 HWTH-OPT-COOKIETYPE            VALUE 38.
+           88 HWTH-OPT-COOKIE-INPUT-BUFFER   VALUE 39.
+           88 HWTH-OPT-COOKIE-OUTPUT-BUFFER  VALUE 40.
+           88 HWTH-OPT-VERBOSE               VALUE 41.
+           88 HWTH-OPT-VERBOSE-OUTPUT        VALUE 42.
+           88 HWTH-OPT-SSLCIPHERSPECS        VALUE 43.
+           88 HWTH-OPT-HTTP-VERSION          VALUE 71.
+           88 HWTH-OPT-REQUESTMETHOD         VALUE 72.
+           88 HWTH-OPT-HTTPHEADERS           VALUE 73.
+           88 HWTH-OPT-REQUESTBODY           VALUE 74.
+           88 HWTH-OPT-TRANSLATE-REQBODY     VALUE 75.
+           88 HWTH-OPT-RESPONSEHDR-EXIT      VALUE 76.
+           88 HWTH-OPT-RESPONSEHDR-USERDATA  VALUE 77.
+           88 HWTH-OPT-RESPONSEBODY-EXIT     VALUE 78.
+           88 HWTH-OPT-RESPONSEBODY-USERDATA VALUE 79.
+           88 HWTH-OPT-TRANSLATE-RESPBODY    VALUE 80.
+           88 HWTH-OPT-HTTPAUTH              VALUE 81.
+           88 HWTH-OPT-USERNAME              VALUE 82.
+           88 HWTH-OPT-PASSWORD              VALUE 83.
+           88 HWTH-OPT-COOKIE                VALUE 84.
+      *
+      * ------------------------------------------------------------
+      * Option Value definitions
+      * ------------------------------------------------------------
+       01  HWTH-IPSTACK                  GLOBAL PIC X(8).
+      *
+       01  HWTH-USESSL                   GLOBAL PIC 9(9) BINARY.
+           88  HWTH-SSL-NONE                   VALUE 0.
+           88  HWTH-SSL-USE                    VALUE 1.
+      *
+       01  HWTH-SSLVERSION               GLOBAL PIC 9(9) BINARY.
+           88  HWTH-SSLVERSION-SSLV3           VALUE 1.
+           88  HWTH-SSLVERSION-TLSV1           VALUE 2.
+           88  HWTH-SSLVERSION-TLSV11          VALUE 3.
+           88  HWTH-SSLVERSION-TLSV12          VALUE 4.
+           88  HWTH-SSLVERSION-DEFAULT         VALUE 99.
+      *
+       01  HWTH-SSLKEYTYPE               GLOBAL PIC 9(9) BINARY.
+           88  HWTH-SSLKEYTYPE-KEYDBFILE       VALUE 1.
+           88  HWTH-SSLKEYTYPE-KEYRINGNAME     VALUE 2.
+      *
+       01  HWTH-MAXREDIRECTS             GLOBAL PIC X(4).
+      *
+       01  HWTH-XDOMAIN-REDIRECTS        GLOBAL PIC 9(9) BINARY.
+           88  HWTH-XDOMAIN-REDIRS-NOTALLOWED  VALUE 1.
+           88  HWTH-XDOMAIN-REDIRS-ALLOWED     VALUE 2.
+      *
+       01  HWTH-REDIRECT-PROTOCOL        GLOBAL PIC 9(9) BINARY.
+           88  HWTH-REDIRECT-NOPROTCHANGE      VALUE 0.
+           88  HWTH-REDIRECT-HTTPS             VALUE 1.
+           88  HWTH-REDIRECT-HTTP              VALUE 2.
+           88  HWTH-REDIRECT-NOHTTPS           VALUE 3.
+      *
+       01  HWTH-COOKIETYPE               GLOBAL PIC 9(9) BINARY.
+           88  HWTH-COOKIETYPE-NONE            VALUE 0.
+           88  HWTH-COOKIETYPE-SESSION         VALUE 1.
+           88  HWTH-COOKIETYPE-PERSIST         VALUE 2.
+      *
+       01  HWTH-VERBOSE                  GLOBAL PIC 9(9) BINARY.
+           88  HWTH-VERBOSE-OFF                VALUE 0.
+           88  HWTH-VERBOSE-ON                 VALUE 1.
+      *
+       01  HWTH-VERBOSE-OUTPUT-TYPE      GLOBAL PIC X(8).
+      *
+       01  HWTH-HTTPVERSION              GLOBAL PIC 9(9) BINARY.
+           88  HWTH-HTTP-VERSION-NONE          VALUE 0.
+           88  HWTH-HTTP-VERSION-1-0           VALUE 1.
+           88  HWTH-HTTP-VERSION-1-1           VALUE 2.
+      *
+       01  HWTH-REQUESTMETHOD            GLOBAL PIC 9(9) BINARY.
+           88  HWTH-HTTP-REQUEST-POST          VALUE 1.
+           88  HWTH-HTTP-REQUEST-GET           VALUE 2.
+           88  HWTH-HTTP-REQUEST-PUT           VALUE 3.
+           88  HWTH-HTTP-REQUEST-DELETE        VALUE 4.
+           88  HWTH-HTTP-REQUEST-HEAD          VALUE 5.
+      *
+       01  HWTH-HTTPAUTH                 GLOBAL PIC 9(9) BINARY.
+           88  HWTH-HTTPAUTH-NONE              VALUE 0.
+           88  HWTH-HTTPAUTH-BASIC             VALUE 1.
+      *
+       01  HWTH-XLATE-REQBODY            GLOBAL PIC 9(9) BINARY.
+           88  HWTH-XLATE-REQBODY-NONE         VALUE 0.
+           88  HWTH-XLATE-REQBODY-E2A          VALUE 1.
+      *
+       01  HWTH-XLATE-RESPBODY           GLOBAL PIC 9(9) BINARY.
+           88  HWTH-XLATE-RESPBODY-NONE         VALUE 0.
+           88  HWTH-XLATE-RESPBODY-A2E          VALUE 1.
+      *
+      * ============================================================
+      * HWTHSLST Parameter Definitions and Constants
+      * ============================================================
+       01  HWTH-SLST-FUNCTION            GLOBAL PIC 9(9) BINARY.
+           88  HWTH-SLST-NEW                   VALUE 1.
+           88  HWTH-SLST-APPEND                VALUE 2.
+           88  HWTH-SLST-FREE                  VALUE 3.
+      *
+      * ============================================================
+      * HWTHTERM Parameter Definitions and Constants
+      * ============================================================
+       01  HWTH-FORCETYPE                GLOBAL PIC 9(9) BINARY.
+           88  HWTH-NOFORCE                     VALUE 0.
+           88  HWTH-FORCE                       VALUE 1.
+      *
+      * ============================================================
+      * HTTP Enabler callback routine and Constants
+      * ============================================================
+       01  HWTH-RESP-STATUS-LINE GLOBAL PIC X(20).
+      *
+       01  HWTH-RESP-STATUS-MAP  GLOBAL REDEFINES HWTH-RESP-STATUS-LINE.
+           05  HWTH-STATUS-CODE           PIC 9(9) BINARY.
+           05  HWTH-STATUS-VERS-PTR       POINTER.
+           05  HWTH-STATUS-VERS-LEN       PIC 9(9) BINARY.
+           05  HWTH-STATUS-REASON-PTR     POINTER.
+           05  HWTH-STATUS-REASON-LEN     PIC 9(9) BINARY.
+      *
+       01  HWTH-RESP-EXIT-FLAGS          GLOBAL PIC 9(9) BINARY.
+           88  HWTH-EXITFLAG-COOKIESTORE-FULL      VALUE 1.
+           88  HWTH-EXITFLAG-COOKIE-INVALID        VALUE 2.
+           88  HWTH-EXITFLAG-CHUNKED-TRAILER       VALUE 16.
+      *
+       01  HWTH-RESP-EXIT-RC             GLOBAL PIC 9(9) BINARY.
+           88  HWTH-RESP-EXIT-RC-OK             VALUE 0.
+           88  HWTH-RESP-EXIT-RC-ABORT          VALUE 1.
+      *
+      * HTTP Response Header callback routine linkage section
+      * (copy this section into your header callback routine as needed)
+      *---------------------------------------------------------------
+      *LINKAGE SECTION.
+      *01 HTTPResponse                PIC X(20).
+      *01 exitFlags                   PIC X(4).
+      *01 headerNamePtr               USAGE POINTER.
+      *01 headerNameLen               PIC 9(9) BINARY.
+      *01 headerValuePtr              USAGE POINTER.
+      *01 headerValueLen              PIC 9(9) BINARY.
+      *01 headerUserDataPtr           USAGE POINTER.
+      *01 headerUserDataLen           PIC 9(9) BINARY.
+      *
+      * HTTP Response Body callback routine linkage section
+      * (copy this section into your resp body callback rtn as needed)
+      *---------------------------------------------------------------
+      *LINKAGE SECTION.
+      *01 HTTPResponse                PIC X(20).
+      *01 exitFlags                   PIC X(4).
+      *01 respBodyPtr                 USAGE POINTER.
+      *01 respBodyLen                 PIC 9(9) BINARY.
+      *01 bodyUserDataPtr             USAGE POINTER.
+      *01 bodyUserDataLen             PIC 9(9) BINARY.
+      *
+      * ============================================================
+      * HTTP Enabler callable services invocations
+      * ============================================================
+      * Refer to the IBM-supplied COBOL sample shipped in samplib
+      * or see the z/OS MVS Callable Services for High-Level Languages
+      * publication for invocation details.
+
