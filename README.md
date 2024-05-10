@@ -9,7 +9,7 @@ conduct RESTful data transfers with other system who works as a HTTP server.
 2. The data to be POSTed is hard-coded in the program to simplify the logic. In real world,
    data to be POSTed should be read into the program instead.
    
-3. Sample z/OS JAVA programs as well as JCLs that perform the same POST function also provided.
+3. Sample z/OS JAVA programs as well as JCLs that perform the same POST function are also provided.
    Note that JAVA programs on z/OS are using the JVM and JAVA library services which are NOT
    part of the z/OS Client Web Enablement Toolkit.
    
@@ -23,7 +23,7 @@ conduct RESTful data transfers with other system who works as a HTTP server.
 
 7. Please refer to the Power Point file for further details. 
 
-8. for running Open Liberty as the HTTP server on Windows, please also see another file:
+8. For running Open Liberty as the HTTP server on Windows, please also see another file:
    ReadMeFirst.txt in Liberty_Server.zip            
 
 
